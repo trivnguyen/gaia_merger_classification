@@ -57,8 +57,7 @@ def parse_cmd():
                         help='if given, log output to file in output directory')
     parser.add_argument('--store-val-output', action='store_true',
                         help='Enable to store output of validation set')
-    parser.add_argument('--debug', action='store_true',
-                        help='Enable debugging mode')
+
     
     # training args
     parser.add_argument(
@@ -68,6 +67,13 @@ def parse_cmd():
         '-e', '--max-epochs', required=False, type=int, default=20,
         help='Maximum number of epochs. Stop training automatically if exceeds. ' + 
                 'Default to 10')
+    
+    # debug args
+    parser.add_argument('--debug', action='store_true',
+                        help='Enable debugging mode')
+    parser.add_argument('--n-max-files', required=False, type=int,
+                        help='Maximum number of files to read. For debugging purposes only')
+                        
     
     return parser.parse_args()
 
@@ -104,14 +110,19 @@ if __name__ == '__main__':
     # define preprocess transformation function
     transform = preprocess(input_key, FLAGS)
     
+    if FLAGS.n_max_files is not None:
+        if FLAGS.n_max_files <= 0:
+            raise ValueError('Flag n_max_file must be greater than 0')
+        logger.warn('Flag n_max_files is given. Value: {:d}'.format(FLAGS.n_max_files))
+    
     train_dataset = data_utils.Dataset(
         os.path.join(FLAGS.input_dir, 'train'), 
         input_key=input_key, label_key='labels', transform=transform, 
-        n_max_file=1)
+        n_max_file=FLAGS.n_max_files)
     val_dataset = data_utils.Dataset(
         os.path.join(FLAGS.input_dir, 'val'), 
         input_key=input_key, label_key='labels', transform=transform,
-        n_max_file=5)
+        n_max_file=FLAGS.n_max_files)
 
     # DEBUG ONLY: fake dataset for debugging purposes
     if FLAGS.debug:

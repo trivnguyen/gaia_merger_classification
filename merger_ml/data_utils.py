@@ -31,7 +31,7 @@ class Dataset(torch.utils.data.Dataset):
         self.shuffle = shuffle
         self.transform = transform
 
-        self.input_dim = len(input_key)
+        self.input_dims = len(input_key)
     
         # get a list of file in directory
         self.input_files = sorted(

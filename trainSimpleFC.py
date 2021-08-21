@@ -90,12 +90,12 @@ if __name__ == '__main__':
     # parse command line argument
     FLAGS = parse_cmd()
     device = torch.device(DEVICE)
+    os.makedirs(FLAGS.out_dir, exist_ok=True)
 
     # set up logger
     logger = logging.getLogger()
     logger.setLevel(logging.DEBUG)
     formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-    
     stream_handler = logging.StreamHandler(sys.stdout)
     stream_handler.setFormatter(formatter)
     logger.addHandler(stream_handler)
@@ -120,7 +120,7 @@ if __name__ == '__main__':
     if FLAGS.n_max_files is not None:
         if FLAGS.n_max_files <= 0:
             raise ValueError('Flag n_max_file must be greater than 0')
-        logger.warn('Flag n_max_files={:d} is given.'.format(FLAGS.n_max_files))
+        logger.warning('Flag n_max_files={:d} is given.'.format(FLAGS.n_max_files))
     
     # DEBUG ONLY: fake dataset for debugging purposes
     if not FLAGS.debug:
@@ -145,8 +145,8 @@ if __name__ == '__main__':
     n_train = len(train_dataset)
     n_val = len(val_dataset)
 
-    logging.info('Number of training samples: {:d}'.format(n_train))
-    logging.info('Number of validation samples: {:d}'.format(n_val))
+    logging.info('Number of training samples  : {:,d}'.format(n_train))
+    logging.info('Number of validation samples: {:,d}'.format(n_val))
 
     # we'll use PyTorch Dataloader to manage dataset (e.g. shuffle, batching, etc.)
     train_loader = DataLoader(train_dataset, batch_size=FLAGS.batch_size,
@@ -164,16 +164,17 @@ if __name__ == '__main__':
     
     # use binary cross entropy loss function: Sigmoid + BCE loss 
     # weights to account for imbalanced dataset
-    if FLAGS.weights:
-        with open(os.path.join(out_dir_base, 'properties.json'), 'r') as f:
+    if FLAGS.use_weights:
+        with open(os.path.join(FLAGS.input_dir, 'properties.json'), 'r') as f:
             properties = json.load(f)
         w_insitu = 1. / properties['train']['f_insitu'] # w_insitu = N_total / N_insitu
         # w_accreted = N_total / (N_accreted * 5)
-        w_accreted = 1. / properties['train']['f_accreted']  / 5
-        pos_weight = w_accreted / w_insitu
+        w_accreted = 1. / properties['train']['f_accreted']  / 5        
+        pos_weight = torch.as_tensor(w_accreted / w_insitu).to(device)
+        logging.info('Use imbalance weight: {:.4f}'.format(pos_weight.item()))
     else:
         pos_weight = None
-    criterion = nn.BCEWithLogitLoss(reduction='sum', pos_weight=pos_weight)
+    criterion = nn.BCEWithLogitsLoss(reduction='sum', pos_weight=pos_weight)
 
     # Start training
     logging.info('Batch size: {:d}'.format(FLAGS.batch_size))

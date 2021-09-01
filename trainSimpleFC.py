@@ -17,10 +17,19 @@ from merger_ml import classifier_logger, data_utils
 from merger_ml.modules import simple_fc
 
 # define global constant
-NUM_WORKERS = 1    # number of workers for PyTorch DataLoader
 INPUT_KEY = {
     '5D': ('l', 'b', 'parallax', 'pmra', 'pmdec'),
-    '6D': ('l', 'b', 'parallax', 'pmra', 'pmdec', 'radial_velocity')
+    '6D': ('l', 'b', 'parallax', 'pmra', 'pmdec', 'radial_velocity'),
+    '5D_FEH': ('l', 'b', 'parallax', 'pmra', 'pmdec', 'feh'),
+    '6D_FEH': ('l', 'b', 'parallax', 'pmra', 'pmdec', 'radial_velocity', 'feh'),
+    '5D_PHOT': ('l', 'b', 'parallax', 'pmra', 'pmdec',
+                'phot_g_mean_mag', 'phot_bp_mean_mag', 'phot_rp_mean_mag'),
+    '6D_PHOT': ('l', 'b', 'parallax', 'pmra', 'pmdec', 'radial_velocity', 
+                'phot_g_mean_mag', 'phot_bp_mean_mag', 'phot_rp_mean_mag'),
+    '5D_FEH_PHOT': ('l', 'b', 'parallax', 'pmra', 'pmdec', 'feh', 
+                    'phot_g_mean_mag', 'phot_bp_mean_mag', 'phot_rp_mean_mag'),
+    '6D_FEH_PHOT': ('l', 'b', 'parallax', 'pmra', 'pmdec', 'radial_velocity', 'feh', 
+                    'phot_g_mean_mag', 'phot_bp_mean_mag', 'phot_rp_mean_mag'),
 }
 
 # check if GPU is available, if not use CPU
@@ -60,8 +69,9 @@ def parse_cmd():
                         help='path to output directory')
     parser.add_argument('-l', '--log-file', required=False,
                         help='if given, log output to file in output directory')
-    parser.add_argument('-t','--input-type', choices=('5D', '6D'), type=str.upper, default='5D',
-                        help='Input type for NN. Default to 5D. Choices: 5D, 6D')
+    parser.add_argument(
+        '-k', '--input-key', required=False, default='5D', nargs='+',
+        help='List of keys of input features. If either 5D or 6D, will use default key sets.')
     parser.add_argument('--store-val-output', action='store_true', required=False,
                         help='Enable to store output of validation set')
     # training args
@@ -75,6 +85,9 @@ def parse_cmd():
     parser.add_argument(
         '-w', '--use-weights', action='store_true', required=False,
         help='Enable to use loss weights to account for imbalance training set')
+    parser.add_argument(
+        '-N', '--num-workers', required=False, type=int, default=1,
+        help='Number of workers for Pytorch DataLoader')
     
     # debug args
     parser.add_argument('--debug', action='store_true',
@@ -109,10 +122,12 @@ if __name__ == '__main__':
         file_handler.setFormatter(formatter)
         logger.addHandler(file_handler)
 
-    # read in training and validation dataset
-    # because the dataset is too big to fit into memory, 
-    # we customize our Dataset object to read in only one file at once
-    input_key = INPUT_KEY[FLAGS.input_type]
+    # define the input features for the network
+    if (len(FLAGS.input_key) == 1) and (FLAGS.input_key[0].upper() in INPUT_KEY.keys()):
+        input_key = INPUT_KEY[FLAGS.input_key[0].upper()]    
+    else:
+        input_key = FLAGS.input_key
+    logger.info('Input key: {}'.format(input_key))
     
     # define preprocess transformation function
     transform = preprocess(input_key, FLAGS)
@@ -122,8 +137,11 @@ if __name__ == '__main__':
             raise ValueError('Flag n_max_file must be greater than 0')
         logger.warning('Flag n_max_files={:d} is given.'.format(FLAGS.n_max_files))
     
-    # DEBUG ONLY: fake dataset for debugging purposes
+    # read in training and validation dataset
+    # because the dataset is too big to fit into memory, 
+    # we customize our Dataset object to read in only one file at once
     if not FLAGS.debug:
+        # DEBUG ONLY: fake dataset for debugging purposes
         train_dataset = data_utils.Dataset(
             os.path.join(FLAGS.input_dir, 'train'), 
             input_key=input_key, label_key='labels', transform=transform, 
@@ -150,9 +168,9 @@ if __name__ == '__main__':
 
     # we'll use PyTorch Dataloader to manage dataset (e.g. shuffle, batching, etc.)
     train_loader = DataLoader(train_dataset, batch_size=FLAGS.batch_size,
-                              pin_memory=PIN_MEMORY, num_workers=NUM_WORKERS)
+                              pin_memory=PIN_MEMORY, num_workers=FLAGS.num_workers)
     val_loader = DataLoader(val_dataset, batch_size=FLAGS.batch_size,
-                            pin_memory=PIN_MEMORY, num_workers=NUM_WORKERS)
+                            pin_memory=PIN_MEMORY, num_workers=FLAGS.num_workers)
     n_batch_total = len(train_loader)
 
     # initialize a NN classifier
@@ -161,6 +179,7 @@ if __name__ == '__main__':
 
     # use ADAM optimizer with default LR
     optimizer = optim.Adam(net.parameters(), lr=1e-3)
+#     scheduler = optim.lr_scheduler.StepLR(optimizer, 5, 0.5)
     
     # use binary cross entropy loss function: Sigmoid + BCE loss 
     # weights to account for imbalanced dataset
@@ -175,7 +194,7 @@ if __name__ == '__main__':
     else:
         pos_weight = None
     criterion = nn.BCEWithLogitsLoss(reduction='sum', pos_weight=pos_weight)
-
+    
     # Start training
     logging.info('Batch size: {:d}'.format(FLAGS.batch_size))
     logging.info('Max epochs: {:d}'.format(FLAGS.max_epochs))
@@ -201,7 +220,7 @@ if __name__ == '__main__':
             loss.backward()    # backward pass
             optimizer.step()     # gradient descent
             train_loss += loss.item()    # update training loss
-    #     scheduler.step()  # update LR scheduler
+#         scheduler.step()  # update LR scheduler
 
         # Evaluation loop
         net.eval()    # switch NN to evaluation mode

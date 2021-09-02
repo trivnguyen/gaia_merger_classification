@@ -67,6 +67,7 @@ def parse_cmd():
                         help='Latent dimension of VAE.')
     parser.add_argument('--store-val-output', action='store_true',
                         help='Enable to store output of validation set')
+
     # training args
     parser.add_argument(
         '-b', '--batch-size', required=False, type=int, default=1000,
@@ -81,7 +82,6 @@ def parse_cmd():
                         help='Enable debugging mode')
     parser.add_argument('--n-max-files', required=False, type=int,
                         help='Maximum number of files to read. For debugging purposes only')
-    
     return parser.parse_args()
 
 
@@ -121,7 +121,7 @@ if __name__ == '__main__':
         if FLAGS.n_max_files <= 0:
             raise ValueError('Flag n_max_file must be greater than 0')
         logger.warn('Flag n_max_files={:d} is given.'.format(FLAGS.n_max_files))
-
+    
     # DEBUG ONLY: fake dataset for debugging purposes
     if FLAGS.debug:
         logging.info('Debugging mode')

@@ -12,9 +12,9 @@ import argparse
 import numpy as np
 
 # properties to write to subsample output files
-PROPS = ('source_id', 'ra', 'dec', 'parallax', 'pmra', 'pmdec', 'radial_velocity',
-         'feh', 'px_true', 'py_true', 'pz_true', 'vx_true', 'vy_true', 'vz_true',
-         'parallax_over_error', 'labels')
+PROPS = ['source_id', 'parentid', 'ra', 'dec', 'l', 'b', 'parallax', 'pmra', 'pmdec', 
+         'radial_velocity', 'feh', 'px_true', 'py_true', 'pz_true', 'vx_true', 'vy_true', 'vz_true',
+         'parallax_over_error']
 
 def parse_cmd():
     ''' Parse command-line arguments '''
@@ -42,12 +42,22 @@ if __name__ == '__main__':
     print('Simulation files: ')
     print("\n".join(sim_files))
 
-    # get index-to-label mapping array
-    # parentid of each star is the index of the mapping array
+    # if the file containing the index-to-label mapping array is given,
+    # then also label each stars. Stars without any label will not be included 
+    # in the final subsample
     if FLAGS.labels_mapping is not None:
+        PROPS.append('labels')
         with h5py.File(FLAGS.labels_mapping, 'r') as f:
             labels_mapping = f['labels'][:]
+            id_stars = f['id_stars'][:]
+            
+            # sort by index
+            sort = np.argsort(id_stars)
+            id_stars = id_stars[sort]
+            labels_mapping = labels_mapping[sort]
+            
             print(dict(f.attrs))
+
     else:
         print(PROPS)
     os.makedirs(FLAGS.output_dir, exist_ok=True)
@@ -82,7 +92,8 @@ if __name__ == '__main__':
                     if input_f.get(p) is None:
                         raise KeyError('key {} is not in input file',format(p))
                 print('Adding keys {}'.format(PROPS))
-
+            
+            N_out_total = 0
             with h5py.File(output_fname, mode) as output_f:
 
                 # start slicing input data
@@ -94,12 +105,19 @@ if __name__ == '__main__':
                     start = slices[i]
                     stop = slices[i + 1]
 
-                    # get parallax over error and apply a cut
+                    # get parallax over error and apply a parallax cut
                     parallax_over_error = input_f['parallax_over_error'][start: stop]
                     cut = parallax_over_error > 10   # equivalent to dp / p  < 0.1
+                    
+                    # if label mapping array is given, stars without labels are not considered
+                    if FLAGS.labels_mapping is not None:
+                        parentid = input_f['parentid'][start: stop]
+                        cut = cut & np.isin(parentid, id_stars)
+                        
                     N_slices = np.sum(cut)
+                    N_out_total += N_slices                    
 
-                    # in case none of the data pass parallax cut
+                    # in case none of the data pass the cut
                     if N_slices == 0:
                         continue
 
@@ -109,10 +127,7 @@ if __name__ == '__main__':
                             values = parallax_over_error[cut]
                         # map parentid to labels
                         elif p == 'labels':
-                            if FLAGS.labels_mapping is None:
-#                                 print('! labels-mapping file needs to be given to add labels')
-                                continue
-                            values = labels_mapping[input_f['parentid'][start: stop][cut]]
+                            values = labels_mapping[np.digitize(parentid[cut], id_stars) - 1]
                         else:
                             values = input_f[p][start: stop][cut]
 
@@ -124,5 +139,10 @@ if __name__ == '__main__':
                             dset = output_f[p]
                             dset.resize(dset.shape[0] + N_slices, axis=0)
                             dset[-N_slices:] = values
+        # delete empty files
+        if N_out_total == 0:
+            print('\nWARNING: file is empty. Removing...')
+            os.remove(output_fname)
         print('-------------')
     print('Done!')
+

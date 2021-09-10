@@ -70,7 +70,7 @@ def parse_cmd():
     parser.add_argument('-l', '--log-file', required=False,
                         help='if given, log output to file in output directory')
     parser.add_argument(
-        '-k', '--input-key', required=False, default='5D', nargs='+',
+        '-k', '--input-key', required=False, default=['5D', ], nargs='+',
         help='List of keys of input features. If either 5D or 6D, will use default key sets.')
     parser.add_argument('--store-val-output', action='store_true', required=False,
                         help='Enable to store output of validation set')

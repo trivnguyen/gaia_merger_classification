@@ -73,22 +73,36 @@ def parse_cmd():
     parser.add_argument('-l', '--log-file', required=False,
                         help='if given, log output to file in output directory')
     parser.add_argument(
+            '-d', '--dataset', required=False, default='test', choices=('train', 'val', 'test'),
+            help='Choose which dataset to use. Must be "train", "val", or "test".')
+    parser.add_argument(
         '-k', '--input-key', required=False, default='5D', nargs='+',
         help='List of keys of input features. If either 5D or 6D, will use default key sets.')   
     parser.add_argument('--store-val-output', action='store_true', required=False,
                         help='Enable to store output of validation set')
+    
+    # nn args
+    parser.add_argument(
+        '-l1', '--hidden-layer-1', dest='l1', required=False, type=int, default=32,
+        help='Dim of hidden layer 1')
+    parser.add_argument(
+        '-l2', '--hidden-layer-2', dest='l2', required=False, type=int, default=64,
+        help='Dim of hidden layer 2')
+    
     # validation args
     parser.add_argument(
         '-b', '--batch-size', required=False, type=int, default=1000,
         help='Batch size. Default to 1000')
     parser.add_argument(
         '--compute-loss', action='store_true', required=False,
-        help='Enable to compute loss function',
-    )
+        help='Enable to compute loss function')
     parser.add_argument(
         '-w', '--use-weights', action='store_true', required=False,
         help='Enable to compute the loss function with weights. Works only if compute_loss is enabled'
-    )
+    ) 
+    parser.add_argument(
+        '--pos-weight-factor', required=False, type=float, default=5,
+        help='If loss weights are enable, divide label-1 weight by this factor.')
     parser.add_argument(
         '-N', '--num-workers', required=False, type=int, default=1,
         help='Number of workers for Pytorch DataLoader'
@@ -149,8 +163,9 @@ if __name__ == '__main__':
     # read in training and validation dataset
     # because the dataset is too big to fit into memory, 
     # we customize our Dataset object to read in only one file at once
+    logger.info('Inference on {} dataset'.format(FLAGS.dataset))
     test_dataset = data_utils.Dataset(
-        os.path.join(FLAGS.input_dir, 'test'), input_key=input_key, label_key=label_key,
+        os.path.join(FLAGS.input_dir, FLAGS.dataset), input_key=input_key, label_key=label_key,
         transform=transform, n_max_file=FLAGS.n_max_files,
     )
     input_dims = test_dataset.input_dims    
@@ -165,7 +180,7 @@ if __name__ == '__main__':
     n_batch_total = len(test_loader)
 
     # initialize a NN classifier
-    net = simple_fc.SimpleFC(input_dims)
+    net = simple_fc.SimpleFC(input_dims, l1=FLAGS.l1, l2=FLAGS.l2)
     net.load_state_dict(torch.load(FLAGS.state, map_location='cpu'))
     net.to(device)    # move NN to GPU if enabled
     net.eval()    # switch to evaluation mode
@@ -176,10 +191,10 @@ if __name__ == '__main__':
         if FLAGS.use_weights:
             with open(os.path.join(FLAGS.input_dir, 'properties.json'), 'r') as f:
                 properties = json.load(f)
-            w_insitu = 1. / properties['train']['f_insitu'] # w_insitu = N_total / N_insitu
-            # w_accreted = N_total / (N_accreted * 5)
-            w_accreted = 1. / properties['train']['f_accreted']  / 5        
-            pos_weight = torch.as_tensor(w_accreted / w_insitu).to(device)
+            w_0 = 1. / properties['train']['f_0'] # w_1 = N_total / N_0
+            # w_1 = N_total / (N_1 * pos_weight_factor)
+            w_1 = 1. / properties['train']['f_1']  / FLAGS.pos_weight_factor   
+            pos_weight = torch.as_tensor(w_1 / w_0).to(device)
             logging.info('Use imbalance weight: {:.4f}'.format(pos_weight.item()))
         else:
             pos_weight = None

@@ -64,16 +64,25 @@ def parse_cmd():
 
     # io args
     parser.add_argument('-i', '--input-dir', required=True,
-                        help='path to input directory')
+                        help='path to input directory.')
     parser.add_argument('-o', '--out-dir', required=True,
-                        help='path to output directory')
+                        help='path to output directory.')
     parser.add_argument('-l', '--log-file', required=False,
-                        help='if given, log output to file in output directory')
+                        help='if given, log output to file in output directory.')
     parser.add_argument(
         '-k', '--input-key', required=False, default=['5D', ], nargs='+',
         help='List of keys of input features. If either 5D or 6D, will use default key sets.')
     parser.add_argument('--store-val-output', action='store_true', required=False,
-                        help='Enable to store output of validation set')
+                        help='Enable to store output of validation set.')
+    
+    # nn args
+    parser.add_argument(
+        '-l1', '--hidden-layer-1', dest='l1', required=False, type=int, default=32,
+        help='Dim of hidden layer 1')
+    parser.add_argument(
+        '-l2', '--hidden-layer-2', dest='l2', required=False, type=int, default=64,
+        help='Dim of hidden layer 2')
+
     # training args
     parser.add_argument(
         '-b', '--batch-size', required=False, type=int, default=1000,
@@ -81,17 +90,26 @@ def parse_cmd():
     parser.add_argument(
         '-e', '--max-epochs', required=False, type=int, default=20,
         help='Maximum number of epochs. Stop training automatically if exceeds. ' + 
-                'Default to 10')
+                'Default is 10.')
+    parser.add_argument(
+        '-lr', '--learning-rate', dest='lr', required=False, type=float, default=1e-3,
+        help='Learning rate of ADAM. Default is 1e-3')
+    parser.add_argument(
+        '--use-lr-scheduler', action='store_true', required=False,
+        help='Enable to use LR scheduler. LR scheduler is set to reduced on plateau.')
     parser.add_argument(
         '-w', '--use-weights', action='store_true', required=False,
-        help='Enable to use loss weights to account for imbalance training set')
+        help='Enable to use loss weights to account for imbalance training set.')
+    parser.add_argument(
+        '--pos-weight-factor', required=False, type=float, default=5,
+        help='If loss weights are enable, divide label-1 weight by this factor.')
     parser.add_argument(
         '-N', '--num-workers', required=False, type=int, default=1,
-        help='Number of workers for Pytorch DataLoader')
+        help='Number of workers for Pytorch DataLoader.')
     
     # debug args
     parser.add_argument('--debug', action='store_true',
-                        help='Enable debugging mode')
+                        help='Enable debugging mode.')
     parser.add_argument('--n-max-files', required=False, type=int,
                         help='Maximum number of files to read. For debugging purposes only')
     
@@ -174,22 +192,26 @@ if __name__ == '__main__':
     n_batch_total = len(train_loader)
 
     # initialize a NN classifier
-    net = simple_fc.SimpleFC(input_dims)
+    net = simple_fc.SimpleFC(input_dims, l1=FLAGS.l1, l2=FLAGS.l2)
     net.to(device)    # move NN to GPU if enabled
 
     # use ADAM optimizer with default LR
-    optimizer = optim.Adam(net.parameters(), lr=1e-3)
-#     scheduler = optim.lr_scheduler.StepLR(optimizer, 5, 0.5)
+    optimizer = optim.Adam(net.parameters(), lr=FLAGS.lr)
+    if FLAGS.use_lr_scheduler:
+        logging.info('Use LR scheduler')
+        scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min')
+    else:
+        scheduler = None
     
     # use binary cross entropy loss function: Sigmoid + BCE loss 
     # weights to account for imbalanced dataset
     if FLAGS.use_weights:
         with open(os.path.join(FLAGS.input_dir, 'properties.json'), 'r') as f:
             properties = json.load(f)
-        w_insitu = 1. / properties['train']['f_insitu'] # w_insitu = N_total / N_insitu
-        # w_accreted = N_total / (N_accreted * 5)
-        w_accreted = 1. / properties['train']['f_accreted']  / 5        
-        pos_weight = torch.as_tensor(w_accreted / w_insitu).to(device)
+        w_0 = 1. / properties['train']['f_0'] # w_0 = N_total / N_1
+        # w_1 = N_total / (N_1 * pos_weight_factor)
+        w_1 = 1. / properties['train']['f_1']  / FLAGS.pos_weight_factor 
+        pos_weight = torch.as_tensor(w_1 / w_0).to(device)
         logging.info('Use imbalance weight: {:.4f}'.format(pos_weight.item()))
     else:
         pos_weight = None
@@ -220,7 +242,10 @@ if __name__ == '__main__':
             loss.backward()    # backward pass
             optimizer.step()     # gradient descent
             train_loss += loss.item()    # update training loss
-#         scheduler.step()  # update LR scheduler
+        train_loss /= n_train
+        # update LR scheduler
+        if scheduler is not None:
+            scheduler.step(train_loss)
 
         # Evaluation loop
         net.eval()    # switch NN to evaluation mode
@@ -238,11 +263,10 @@ if __name__ == '__main__':
                 # store output of validation set if enabled
                 if FLAGS.store_val_output:
                     train_log.update_predict(yhatb, yb)
-
+        val_loss /= n_val
+        
         # logging at the end of each epoch
         # store average loss per sample
-        train_loss /= n_train
-        val_loss /= n_val
         train_log.update_metric(
             'loss', train_loss, epoch, test_metric=val_loss,
             n_batch_total=n_batch_total)

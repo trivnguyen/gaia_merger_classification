@@ -19,15 +19,15 @@ class SimpleFC(nn.Module):
     ''' Simple FC network that takes in kinematics of a star (e.g. ra, dec, parallax, pmra, pmdec)
         and classify whether a star is accreted or formed in situ with the MW
     '''
-    def __init__(self, input_dims):
+    def __init__(self, input_dims, l1=32, l2=64):
         ''' initialize NN '''
         super().__init__()
         self.name = 'Simple FC'
 
         self.fc = nn.Sequential(
-            FCBlock(input_dims, 32),
-            FCBlock(32, 64),
-            nn.Linear(64, 1),
+            FCBlock(input_dims, l1),
+            FCBlock(l1, l2),
+            nn.Linear(l2, 1),
         )
 
     def forward(self, x):

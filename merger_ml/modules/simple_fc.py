@@ -2,6 +2,25 @@
 import torch
 import torch.nn as nn
 
+# define default parameters tuning config
+DEFAULT_CONFIG = {
+    'lr': {
+        'dist': 'LOG_UNIFORM',
+        'min': 1e-6,
+        'max': 1e-2,
+    },
+    'l1': {
+        'dist': 'UNIFORM',
+        'min': 32,
+        'max': 512,
+    },
+    'l2': {
+        'dist': 'UNIFORM',
+        'min': 64,
+        'max': 1024,
+    }
+}
+
 class FCBlock(nn.Module):
     ''' Convienient FC block '''
     def __init__(self, in_channels, out_channels, dropout_rate=0.5):

@@ -13,7 +13,7 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
 
-from merger_ml import classifier_logger, data_utils
+from merger_ml import classifier_logger, data_utils, utils
 from merger_ml.modules import simple_fc
 
 # define global constant
@@ -106,7 +106,18 @@ def parse_cmd():
     parser.add_argument(
         '-N', '--num-workers', required=False, type=int, default=1,
         help='Number of workers for Pytorch DataLoader.')
-    
+   
+    # tuning args
+    parser.add_argument(
+        '-t', '--tuning', action='store_true', required=False,
+        help='Enable to start tuning mode. ' +
+            'Overwrite lr, l1, l2 with random values drawn from a fix distribution.')
+    parser.add_argument(
+        '-c', '--tuning-config', required=False,
+        help='Config file in JSON format if tuning mode is enabled. ' + 
+            'If not give, use DEFAULT_CONFIG of module.'
+    )
+
     # debug args
     parser.add_argument('--debug', action='store_true',
                         help='Enable debugging mode.')
@@ -154,7 +165,39 @@ if __name__ == '__main__':
         if FLAGS.n_max_files <= 0:
             raise ValueError('Flag n_max_file must be greater than 0')
         logger.warning('Flag n_max_files={:d} is given.'.format(FLAGS.n_max_files))
-    
+   
+    # tuning options
+    if FLAGS.tuning:
+        logger.info('Tuning option is enabled. Randomized lr, l1, l2.')
+        
+        # read in tuning config file
+        if FLAGS.tuning_config is not None:
+            logger.info('Read tuning config from {}'.format(FLAGS.tuning_config))
+            with open(FLAGS.tuning_config, 'r') as f:
+                tuning_config = json.load(f)
+        else:
+            logger.info('Use default tuning config')
+            tuning_config = simple_fc.DEFAULT_CONFIG
+        logger.info(tuning_config)
+
+        # Sample and replace FLAGS parameters
+        rvars =  utils.sample_tuning(tuning_config)
+        temp = vars(FLAGS)
+        for key, rvar in rvars.items():
+            temp[key] = rvar
+    else:
+        rvars = {}
+        rvars['lr'] = FLAGS.lr
+        rvars['l1'] = FLAGS.l1
+        rvars['l2'] = FLAGS.l2
+    logger.info('Network and training parameters: ')
+    for key, rvar in rvars.items():
+        logger.info('- {}: {}'.format(key, rvar))
+
+    # write parameters
+    with open(os.path.join(FLAGS.out_dir, 'hyperparams.json'), 'w') as f:
+        json.dump(rvars, f, indent=4)
+
     # read in training and validation dataset
     # because the dataset is too big to fit into memory, 
     # we customize our Dataset object to read in only one file at once

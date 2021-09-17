@@ -2,6 +2,24 @@
 import torch
 import torch.nn as nn
 
+# define default parameters tuning config
+DEFAULT_CONFIG = {
+    'lr': {
+        'dist': 'LOG_UNIFORM',
+        'min': 1e-6,
+        'max': 1e-2,
+    },
+    'lencode': {
+        'dist': 'UNIFORM',
+        'min': 32,
+        'max': 512,
+    },
+    'ldecode': {
+        'dist': 'UNIFORM',
+        'min': 32,
+        'max': 512,
+    }
+}
 
 class FCBlock(nn.Module):
     ''' Convienient FC block '''
@@ -18,11 +36,11 @@ class FCBlock(nn.Module):
 
 
 class Encoder(nn.Module):
-    def __init__(self, input_dims, latent_dims):
+    def __init__(self, input_dims, latent_dims, lencode=32):
         super().__init__()
-        self.fc1 = FCBlock(input_dims, 32)
-        self.fc2 = nn.Linear(32, latent_dims)
-        self.fc3 = nn.Linear(32, latent_dims)
+        self.fc1 = FCBlock(input_dims, lencode)
+        self.fc2 = nn.Linear(lencode, latent_dims)
+        self.fc3 = nn.Linear(lencode, latent_dims)
     
     def forward(self, x):
         ''' Calculate mu, logvar of latent distribution 
@@ -39,11 +57,11 @@ class Encoder(nn.Module):
         
 
 class Decoder(nn.Module):
-    def __init__(self, output_dims, latent_dims):
+    def __init__(self, output_dims, latent_dims, ldecode=32):
         super().__init__()
         self.fc = nn.Sequential(
-            FCBlock(latent_dims, 32),
-            nn.Linear(32, output_dims)
+            FCBlock(latent_dims, ldecode),
+            nn.Linear(ldecode, output_dims)
         )
     def forward(self, z):
         ''' Reconstruct the original input x from the latent variable z'''
@@ -53,13 +71,14 @@ class Decoder(nn.Module):
 class SimpleVAE(nn.Module):
     ''' Simple Variational Autoencoder '''
     
-    def __init__(self, input_dims, latent_dims):
+    def __init__(self, input_dims, latent_dims, lencode=32, ldecode=32):
         super().__init__()
-        self.encoder = Encoder(input_dims, 2)
-        self.decoder = Decoder(input_dims, 2)
+        self.encoder = Encoder(input_dims, 2, lencode)
+        self.decoder = Decoder(input_dims, 2, ldecode)
         
     def forward(self, x):
         ''' Forward propagate x '''
         z, mu, logvar = self.encoder(x)
         x_recon = self.decoder(z)
         return x_recon, z, mu, logvar
+

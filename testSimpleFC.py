@@ -88,7 +88,9 @@ def parse_cmd():
     parser.add_argument(
         '-l2', '--hidden-layer-2', dest='l2', required=False, type=int, default=64,
         help='Dim of hidden layer 2')
-    
+    parser.add_argument('-c', '--config', required=False,
+        help='Hyperparameters config in JSON format. If given, will overwrite l1 and l2.')
+            
     # validation args
     parser.add_argument(
         '-b', '--batch-size', required=False, type=int, default=1000,
@@ -107,7 +109,7 @@ def parse_cmd():
         '-N', '--num-workers', required=False, type=int, default=1,
         help='Number of workers for Pytorch DataLoader'
     )
-    
+
     # debug args
     parser.add_argument('--debug', action='store_true',
                         help='Enable debugging mode')
@@ -138,7 +140,7 @@ if __name__ == '__main__':
             log_file = os.path.join(FLAGS.out_dir, FLAGS.log_file)
         file_handler = logging.FileHandler(log_file, mode='w')
         file_handler.setFormatter(formatter)
-        logger.addHandler(file_handler)
+       logger.addHandler(file_handler)
             
     # define the input features for the network
     if (len(FLAGS.input_key) == 1) and (FLAGS.input_key[0].upper() in INPUT_KEY.keys()):
@@ -180,7 +182,17 @@ if __name__ == '__main__':
     n_batch_total = len(test_loader)
 
     # initialize a NN classifier
-    net = simple_fc.SimpleFC(input_dims, l1=FLAGS.l1, l2=FLAGS.l2)
+    # if given, read in hyperparameters config
+    if FLAGS.config is not None:
+        with open(FLAGS.config, 'r') as f:
+            hyperparams = json.load(f)
+        l1 = hyperparams['l1']
+        l2 = hyperparams['l2']
+    else:
+        l1 = FLAGS.l1
+        l2 = FLAGS.l2
+    
+    net = simple_fc.SimpleFC(input_dims, l1=l1, l2=l2)
     net.load_state_dict(torch.load(FLAGS.state, map_location='cpu'))
     net.to(device)    # move NN to GPU if enabled
     net.eval()    # switch to evaluation mode
@@ -200,7 +212,7 @@ if __name__ == '__main__':
             pos_weight = None
         criterion = nn.BCEWithLogitsLoss(reduction='sum', pos_weight=pos_weight)
 
-    # Start training
+    # Start testing
     logging.info('Batch size: {:d}'.format(FLAGS.batch_size))
     
     test_loss = 0

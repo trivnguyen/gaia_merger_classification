@@ -108,23 +108,33 @@ class Logger:
 
     def display_status(self, metric_name, train_metric, epoch, test_metric=None,
                        max_epochs=None, n_batch_total=1, n_batch=None, show_epoch=True):
-        # convert torch tensor to numpy array
-        if isinstance(train_metric, torch.Tensor):
-            train_metric = train_metric.data.cpu().numpy()
-        if isinstance(test_metric, torch.Tensor):
-            test_metric = test_metric.data.cpu().numpy()
-
+        
+        if not isinstance(metric_name, list):
+            metric_name = [metric_name, ]
+            train_metric = [train_metric, ]
+            test_metric = [test_metric, ]
         if n_batch is None:
             n_batch = n_batch_total
         if max_epochs is None:
             max_epochs = np.nan
-
+        
         # print out epoch number
         if show_epoch:
             logging.info('Epoch: [{}/{}], Batch Num: [{}/{}]'.format(
-                epoch, max_epochs, n_batch, n_batch_total))
-        logging.info('Train {0:}: {1:.4f}, Test {0:}: {2:.4f}'.format(
-            metric_name, train_metric, test_metric))
+                epoch, max_epochs, n_batch, n_batch_total)) 
+        
+        # print out each metric    
+        for i in range(len(metric_name)):
+            name = metric_name[i]
+            train = train_metric[i]
+            test = test_metric[i]
+
+            if isinstance(train, torch.Tensor):
+                train = train.data.cpu().numpy()
+            if isinstance(test, torch.Tensor):
+                test = test_data.cpu().numpy()
+            logging.info('Train {0:}: {1:.4f}, Test {0:}: {2:.4f}'.format(
+                name, train, test))
 
     def update_predict(self, predict, target):
         # convert torch tensor to numpy array

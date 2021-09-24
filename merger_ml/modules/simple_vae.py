@@ -9,6 +9,11 @@ DEFAULT_CONFIG = {
         'min': 1e-6,
         'max': 1e-2,
     },
+    'beta': {
+        'dist': 'UNIFORM',
+        'min': 1,
+        'max': 10,
+    },
     'lencode': {
         'dist': 'UNIFORM',
         'min': 32,

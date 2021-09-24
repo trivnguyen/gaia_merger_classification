@@ -15,6 +15,7 @@ import torch.optim as optim
 from torch.utils.data import DataLoader
 
 from merger_ml import classifier_logger, data_utils, utils
+from merger_ml import loss_functions
 from merger_ml.modules import simple_vae
 
 # define global constant
@@ -102,6 +103,10 @@ def parse_cmd():
     parser.add_argument(
         '--use-lr-scheduler', action='store_true', required=False,
         help='Enable to use LR scheduler. LR scheduler is set to reduced on plateau.')
+    parser.add_argument(
+        '--beta', required=False, type=float, default=1, 
+        help='Regularization factor beta for the KL divergence loss.')
+    
     parser.add_argument(
         '-N', '--num-workers', required=False, type=int, default=1,
         help='Number of workers for Pytorch DataLoader.')
@@ -192,8 +197,8 @@ if __name__ == '__main__':
         rvars['lr'] = FLAGS.lr
         rvars['lencode'] = FLAGS.lencode
         rvars['ldecode'] = FLAGS.ldecode
-        
-    
+        rvars['beta'] = FLAGS.beta
+
     logger.info('Network and training parameters: ')
     for key, rvar in rvars.items():
         logger.info('- {}: {}'.format(key, rvar))
@@ -250,11 +255,8 @@ if __name__ == '__main__':
     else:
         scheduler = None
     
-    # define MSE + KL divergence loss
-    def criterion(x_recon, x, mu, logvar):
-        MSE = F.mse_loss(x_recon, x, reduction='sum')
-        KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
-        return MSE, KLD    
+    # define MSE + KL divergence loss with beta
+    criterion = loss_functions.mse_kld(FLAGS.beta)
 
     # Start training
     logging.info('Batch size: {:d}'.format(FLAGS.batch_size))
@@ -270,6 +272,7 @@ if __name__ == '__main__':
         net.train()    # switch NN to training mode
         train_mse_loss = 0.
         train_kld_loss = 0.
+        train_total_loss = 0.
         for i, xb in enumerate(train_loader):
             optimizer.zero_grad()    # reset optimizer gradient
             
@@ -280,20 +283,24 @@ if __name__ == '__main__':
             xb_recon, z, mu, logvar = net(xb)
 
             # calculate MSE loss and KL divergence loss
-            mse_loss, kld_loss = criterion(xb_recon, xb, mu, logvar)
-            loss = (mse_loss + kld_loss) / xb_recon.size(0)
+            mse_loss, kld_loss, total_loss = criterion(xb_recon, xb, mu, logvar)
+            loss = total_loss / xb_recon.size(0)
             loss.backward()
             optimizer.step()
             
+            # update loss for bookkeeping
             train_mse_loss += mse_loss.item()
             train_kld_loss += kld_loss.item()
+            train_total_loss += total_loss.item()
+
         # update LR scheduler
-        scheduler.step(train_mse_loss + train_kld_loss)
+        scheduler.step(train_total_loss)
 
         # Evaluation loop
         net.eval()    # switch NN to evaluation mode
         val_mse_loss = 0.
         val_kld_loss = 0.
+        val_total_loss = 0.
         with torch.no_grad():
             for i, xb in enumerate(val_loader):
                 # convert data into the correct tensor type
@@ -303,9 +310,10 @@ if __name__ == '__main__':
                 xb_recon, z, mu, logvar = net(xb)
             
                 # calculate MSE loss and KL divergence loss
-                mse_loss, kld_loss = criterion(xb_recon, xb, mu, logvar)
+                mse_loss, kld_loss, total_loss = criterion(xb_recon, xb, mu, logvar)
                 val_mse_loss += mse_loss.item()
                 val_kld_loss += kld_loss.item()
+                val_total_loss += total_loss.item()
                 
                 # store output of validation set if enabled
                 if FLAGS.store_val_output:
@@ -315,10 +323,10 @@ if __name__ == '__main__':
         # store average loss per sample
         train_mse_loss /= n_train
         train_kld_loss /= n_train
-        train_total_loss = train_mse_loss + train_kld_loss
+        train_total_loss /= n_train
         val_mse_loss /= n_val
         val_kld_loss /= n_val
-        val_total_loss = val_mse_loss + val_kld_loss
+        val_total_loss /= n_val
        
         train_log.update_metric(
             'mse_loss', train_mse_loss, epoch, test_metric=val_mse_loss,

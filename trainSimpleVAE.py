@@ -173,7 +173,7 @@ if __name__ == '__main__':
     
     # tuning options
     if FLAGS.tuning:
-        logger.info('Tuning option is enabled. Randomized lr, l1, l2.')
+        logger.info('Tuning option is enabled. Randomized hyperparameters.')
         
         # read in tuning config file
         if FLAGS.tuning_config is not None:

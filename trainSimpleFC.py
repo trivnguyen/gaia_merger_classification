@@ -74,7 +74,10 @@ def parse_cmd():
         help='List of keys of input features. If either 5D or 6D, will use default key sets.')
     parser.add_argument('--store-val-output', action='store_true', required=False,
                         help='Enable to store output of validation set.')
-    
+    parser.add_argument(
+        '--resume', required=False, action='store_true', 
+        help='Enable to resume training from the last checkpoint. Ovewrite all hyperparameters.')
+
     # nn args
     parser.add_argument(
         '-l1', '--hidden-layer-1', dest='l1', required=False, type=int, default=32,
@@ -168,7 +171,7 @@ if __name__ == '__main__':
    
     # tuning options
     if FLAGS.tuning:
-        logger.info('Tuning option is enabled. Randomized lr, l1, l2.')
+        logger.info('Tuning option is enabled. Randomized hyperparameters.')
         
         # read in tuning config file
         if FLAGS.tuning_config is not None:

@@ -140,7 +140,7 @@ if __name__ == '__main__':
             log_file = os.path.join(FLAGS.out_dir, FLAGS.log_file)
         file_handler = logging.FileHandler(log_file, mode='w')
         file_handler.setFormatter(formatter)
-       logger.addHandler(file_handler)
+        logger.addHandler(file_handler)
             
     # define the input features for the network
     if (len(FLAGS.input_key) == 1) and (FLAGS.input_key[0].upper() in INPUT_KEY.keys()):

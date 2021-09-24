@@ -78,7 +78,7 @@ def parse_cmd():
             '-d', '--dataset', required=False, default='test', choices=('train', 'val', 'test'),
             help='Choose which dataset to use. Must be "train", "val", or "test".')
     parser.add_argument(
-        '-k', '--input-key', required=False, default='5D', nargs='+',
+        '-k', '--input-key', required=False, default=['5D', ], nargs='+',
         help='List of keys of input features. If either 5D or 6D, will use default key sets.')   
 
     # nn args

@@ -294,7 +294,8 @@ if __name__ == '__main__':
             train_total_loss += total_loss.item()
 
         # update LR scheduler
-        scheduler.step(train_total_loss)
+        if scheduler is not None:
+            scheduler.step(train_total_loss)
 
         # Evaluation loop
         net.eval()    # switch NN to evaluation mode

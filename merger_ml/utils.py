@@ -1,7 +1,7 @@
 
 import scipy.stats as stats
 
-ALL_DIST = ('UNIFORM', 'LOG_UNIFORM')
+ALL_DIST = ('UNIFORM_INT', 'UNIFORM', 'LOG_UNIFORM')
 
 def sample_tuning(config):
     ''' Given a config dictionary, sample variables based on given distribution '''
@@ -16,8 +16,10 @@ def sample_tuning(config):
             raise ValueError('{} sampling dist {} is not implemented.'.format(key, dist))
         
         # sample and add to result dict
-        if dist == 'UNIFORM':
+        if dist == 'UNIFORM_INT':
             rvar = stats.randint.rvs(var_dict['min'], var_dict['max'])
+        elif dist == 'UNIFORM':
+            rvar = stats.uniform.rvs(var_dict['min'], var_dict['max'])
         elif dist == 'LOG_UNIFORM':
             rvar = stats.loguniform.rvs(var_dict['min'], var_dict['max'])
         results[key] = rvar

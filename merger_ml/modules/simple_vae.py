@@ -15,12 +15,12 @@ DEFAULT_CONFIG = {
         'max': 10,
     },
     'lencode': {
-        'dist': 'UNIFORM',
+        'dist': 'UNIFORM_INT',
         'min': 32,
         'max': 512,
     },
     'ldecode': {
-        'dist': 'UNIFORM',
+        'dist': 'UNIFORM_INT',
         'min': 32,
         'max': 512,
     }

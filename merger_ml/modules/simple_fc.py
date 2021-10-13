@@ -10,12 +10,12 @@ DEFAULT_CONFIG = {
         'max': 1e-2,
     },
     'l1': {
-        'dist': 'UNIFORM',
+        'dist': 'UNIFORM_INT',
         'min': 32,
         'max': 512,
     },
     'l2': {
-        'dist': 'UNIFORM',
+        'dist': 'UNIFORM_INT',
         'min': 64,
         'max': 1024,
     }

@@ -24,11 +24,11 @@ INPUT_KEY = {
     '6D_FEH': ('l', 'b', 'parallax', 'pmra', 'pmdec', 'radial_velocity', 'feh'),
     '5D_PHOT': ('l', 'b', 'parallax', 'pmra', 'pmdec',
                 'phot_g_mean_mag', 'phot_bp_mean_mag', 'phot_rp_mean_mag'),
-    '6D_PHOT': ('l', 'b', 'parallax', 'pmra', 'pmdec', 'radial_velocity', 
+    '6D_PHOT': ('l', 'b', 'parallax', 'pmra', 'pmdec', 'radial_velocity',
                 'phot_g_mean_mag', 'phot_bp_mean_mag', 'phot_rp_mean_mag'),
-    '5D_FEH_PHOT': ('l', 'b', 'parallax', 'pmra', 'pmdec', 'feh', 
+    '5D_FEH_PHOT': ('l', 'b', 'parallax', 'pmra', 'pmdec', 'feh',
                     'phot_g_mean_mag', 'phot_bp_mean_mag', 'phot_rp_mean_mag'),
-    '6D_FEH_PHOT': ('l', 'b', 'parallax', 'pmra', 'pmdec', 'radial_velocity', 'feh', 
+    '6D_FEH_PHOT': ('l', 'b', 'parallax', 'pmra', 'pmdec', 'radial_velocity', 'feh',
                     'phot_g_mean_mag', 'phot_bp_mean_mag', 'phot_rp_mean_mag'),
 }
 
@@ -43,23 +43,23 @@ else:
 
 def preprocess(input_key, FLAGS):
     ''' Read in preprocess file and return preprocessing function based on input key '''
-    
+
     preprocess_file = os.path.join(FLAGS.input_dir, 'preprocess.json')
     if not os.path.exists(preprocess_file):
         raise FileNotFoundError('preprocess file not found in input_dir')
-    
+
     with open(preprocess_file, 'r') as f:
         preprocess_dict = json.load(f)
-    
+
     mean = [preprocess_dict[k]['mean'] for k in input_key]
-    std = [preprocess_dict[k]['stdv'] for k in input_key]    
+    std = [preprocess_dict[k]['stdv'] for k in input_key]
 
     # define transformation function
     # in this case transform is a standard scaler
-    def transform(x):    
+    def transform(x):
         return (x - mean) / std
     return transform
-    
+
 def parse_cmd():
     parser = argparse.ArgumentParser()
 
@@ -77,10 +77,10 @@ def parse_cmd():
             help='Choose which dataset to use. Must be "train", "val", or "test".')
     parser.add_argument(
         '-k', '--input-key', required=False, default='5D', nargs='+',
-        help='List of keys of input features. If either 5D or 6D, will use default key sets.')   
+        help='List of keys of input features. If either 5D or 6D, will use default key sets.')
     parser.add_argument('--store-val-output', action='store_true', required=False,
                         help='Enable to store output of validation set')
-    
+
     # nn args
     parser.add_argument(
         '-l1', '--hidden-layer-1', dest='l1', required=False, type=int, default=32,
@@ -90,7 +90,7 @@ def parse_cmd():
         help='Dim of hidden layer 2')
     parser.add_argument('-c', '--config', required=False,
         help='Hyperparameters config in JSON format. If given, will overwrite l1 and l2.')
-            
+
     # validation args
     parser.add_argument(
         '-b', '--batch-size', required=False, type=int, default=1000,
@@ -101,7 +101,7 @@ def parse_cmd():
     parser.add_argument(
         '-w', '--use-weights', action='store_true', required=False,
         help='Enable to compute the loss function with weights. Works only if compute_loss is enabled'
-    ) 
+    )
     parser.add_argument(
         '--pos-weight-factor', required=False, type=float, default=5,
         help='If loss weights are enable, divide label-1 weight by this factor.')
@@ -115,7 +115,7 @@ def parse_cmd():
                         help='Enable debugging mode')
     parser.add_argument('--n-max-files', required=False, type=int,
                         help='Maximum number of files to read. For debugging purposes only')
-    
+
     return parser.parse_args()
 
 
@@ -132,7 +132,7 @@ if __name__ == '__main__':
     stream_handler = logging.StreamHandler(sys.stdout)
     stream_handler.setFormatter(formatter)
     logger.addHandler(stream_handler)
-    
+
     if FLAGS.log_file is not None:
         if os.path.isabs(FLAGS.log_file):
             log_file = FLAGS.log_file
@@ -141,10 +141,10 @@ if __name__ == '__main__':
         file_handler = logging.FileHandler(log_file, mode='w')
         file_handler.setFormatter(formatter)
         logger.addHandler(file_handler)
-            
+
     # define the input features for the network
     if (len(FLAGS.input_key) == 1) and (FLAGS.input_key[0].upper() in INPUT_KEY.keys()):
-        input_key = INPUT_KEY[FLAGS.input_key[0].upper()]    
+        input_key = INPUT_KEY[FLAGS.input_key[0].upper()]
     else:
         input_key = FLAGS.input_key
     if FLAGS.compute_loss:
@@ -153,24 +153,24 @@ if __name__ == '__main__':
         label_key = None
     logger.info('Input key: {}'.format(input_key))
     logger.info('Label key: {}'.format(label_key))
-    
+
     # define preprocess transformation function
     transform = preprocess(input_key, FLAGS)
-    
+
     if FLAGS.n_max_files is not None:
         if FLAGS.n_max_files <= 0:
             raise ValueError('Flag n_max_file must be greater than 0')
         logger.warning('Flag n_max_files={:d} is given.'.format(FLAGS.n_max_files))
-        
+
     # read in training and validation dataset
-    # because the dataset is too big to fit into memory, 
+    # because the dataset is too big to fit into memory,
     # we customize our Dataset object to read in only one file at once
     logger.info('Inference on {} dataset'.format(FLAGS.dataset))
     test_dataset = data_utils.Dataset(
         os.path.join(FLAGS.input_dir, FLAGS.dataset), input_key=input_key, label_key=label_key,
         transform=transform, n_max_file=FLAGS.n_max_files,
     )
-    input_dims = test_dataset.input_dims    
+    input_dims = test_dataset.input_dims
     n_test = len(test_dataset)
 
     logging.info('Number of testing samples  : {:,d}'.format(n_test))
@@ -191,13 +191,13 @@ if __name__ == '__main__':
     else:
         l1 = FLAGS.l1
         l2 = FLAGS.l2
-    
+
     net = simple_fc.SimpleFC(input_dims, l1=l1, l2=l2)
     net.load_state_dict(torch.load(FLAGS.state, map_location='cpu'))
     net.to(device)    # move NN to GPU if enabled
     net.eval()    # switch to evaluation mode
-    
-    # use binary cross entropy loss function: Sigmoid + BCE loss 
+
+    # use binary cross entropy loss function: Sigmoid + BCE loss
     # weights to account for imbalanced dataset
     if FLAGS.compute_loss:
         if FLAGS.use_weights:
@@ -205,7 +205,7 @@ if __name__ == '__main__':
                 properties = json.load(f)
             w_0 = 1. / properties['train']['f_0'] # w_1 = N_total / N_0
             # w_1 = N_total / (N_1 * pos_weight_factor)
-            w_1 = 1. / properties['train']['f_1']  / FLAGS.pos_weight_factor   
+            w_1 = 1. / properties['train']['f_1']  / FLAGS.pos_weight_factor
             pos_weight = torch.as_tensor(w_1 / w_0).to(device)
             logging.info('Use imbalance weight: {:.4f}'.format(pos_weight.item()))
         else:
@@ -214,29 +214,29 @@ if __name__ == '__main__':
 
     # Start testing
     logging.info('Batch size: {:d}'.format(FLAGS.batch_size))
-    
+
     test_loss = 0
     target = []
     predict = []
     with torch.no_grad():
         for i, datab in enumerate(test_loader):
-            
+
             # forward pass
             xb = datab[0].float().to(device)
             yhatb = net(xb)    # forward pass
-            
+
             if FLAGS.compute_loss:
                 yb = datab[1].float().to(device)
                 loss = criterion(yhatb, yb)
                 test_loss += loss.item()    # update test loss
-                
+
                 target.append(yb.cpu().numpy())
             predict.append(yhatb.cpu().numpy())
-                
+
     predict = np.concatenate(predict)
     target = np.concatenate(target)
     test_loss /= len(test_dataset)
-                
+
     # write output file
     logging.info('Writing output file to {}'.format(FLAGS.out_file))
     with h5py.File(FLAGS.out_file, 'w') as f:

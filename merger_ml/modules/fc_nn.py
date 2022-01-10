@@ -26,7 +26,7 @@ class FCBlock(nn.Module):
     def __init__(self, in_channels, out_channels, dropout_rate=0.5):
         super().__init__()
         self.fc = nn.Sequential(
-            nn.Linear(in_channels, out_channels, bias=False),
+            nn.Linear(in_channels, out_channels, bias=True),
             nn.ReLU(inplace=True),
             nn.Dropout(dropout_rate),
             nn.BatchNorm1d(out_channels)
@@ -37,22 +37,31 @@ class FCBlock(nn.Module):
 class FCNetwork(nn.Module):
     ''' FC network that takes in kinematics of a star (e.g. ra, dec, parallax, pmra, pmdec)
     '''
-    def __init__(self, input_dims, hidden_layers=[8, 16, 32], ):
+    def __init__(self, input_dims, hidden_layers=[8, 16, 32], init_weights=True):
         ''' initialize NN '''
         super().__init__()
         self.name = 'FC'
 
         num_hidden = len(hidden_layers)
         layers = []
-        layers.append(FCBlock(input_dims, hidden_layers[0])   # input layers
-        for i in range(len(num_hidden) - 1):
+        layers.append(FCBlock(input_dims, hidden_layers[0]))   # input layers
+        for i in range(num_hidden - 1):
             l_prev = hidden_layers[i]
             l_next = hidden_layers[i+1]
             layers.append(FCBlock(l_prev, l_next))
-        layers.append(hidden_layers[-1], 1) # output layers
-
+        layers.append(nn.Linear(hidden_layers[-1], 1))  # output layers
         self.fc = nn.Sequential(*layers)
+
+        if init_weights:
+            self.apply(self._init_weights)
 
     def forward(self, x):
         ''' Forward propagate x '''
         return self.fc(x)
+
+    def _init_weights(self, m):
+        ''' Initialize weight '''
+        if isinstance(m, nn.Linear):
+            torch.init.xavier_uniform_(m.weight)
+            m.bias.data.fill_(0.01)
+

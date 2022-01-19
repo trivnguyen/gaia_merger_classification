@@ -1,6 +1,11 @@
 
+import json
+import logging
+
 import torch
 import torch.nn as nn
+
+logger = logging.getLogger(__name__)
 
 # define default parameters tuning config
 DEFAULT_CONFIG = {
@@ -37,10 +42,25 @@ class FCBlock(nn.Module):
 class FCNetwork(nn.Module):
     ''' FC network that takes in kinematics of a star (e.g. ra, dec, parallax, pmra, pmdec)
     '''
-    def __init__(self, input_dims, hidden_layers=[8, 16, 32], init_weights=True):
+    def __init__(self, input_dims=1, hidden_layers=[8, 16, 32], init_weights=False,
+                 hyperparameters_fn=None):
         ''' initialize NN '''
         super().__init__()
         self.name = 'FC'
+
+        if hyperparameters_fn is None:
+            self.hyperparameters = {
+                'input_dims': input_dims,
+                'hidden_layers': hidden_layers,
+                'init_weights': init_weights,
+            }
+        else:
+            logger.info('Hyperparameters file is given. Ignore all other args')
+            with open(hyperparameters_fn, 'r') as f:
+                self.hyperparameters = json.load(f)
+            input_dims = self.hyperparameters['input_dims']
+            hidden_layers = self.hyperparameters['hidden_layers']
+            init_weights = self.hyperparameters['init_weights']
 
         num_hidden = len(hidden_layers)
         layers = []
@@ -62,6 +82,6 @@ class FCNetwork(nn.Module):
     def _init_weights(self, m):
         ''' Initialize weight '''
         if isinstance(m, nn.Linear):
-            torch.init.xavier_uniform_(m.weight)
+            torch.nn.init.xavier_normal_(m.weight)
             m.bias.data.fill_(0.01)
 

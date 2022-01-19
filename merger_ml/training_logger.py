@@ -1,6 +1,7 @@
 
 import os
 import h5py
+import json
 import logging
 
 import numpy as np
@@ -18,7 +19,7 @@ logger = logging.getLogger(__name__)
 logging.getLogger('matplotlib').setLevel(logging.INFO)
 
 
-class Logger:
+class Logger():
 
     def __init__(self, out_dir, metrics):
         os.makedirs(out_dir, exist_ok=True)
@@ -30,6 +31,10 @@ class Logger:
         self.target = []
 
         self._print_train()
+
+    def save_hyperparameters(self, model):
+        with open(os.path.join(self.out_dir, 'hyperparams.json'), 'w') as f:
+            json.dump(model.hyperparameters, f, indent=4)
 
     def update_metric(self, metric_name, train_metric, epoch, test_metric=None,
                       n_batch_total=1, n_batch=None):

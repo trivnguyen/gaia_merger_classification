@@ -1,48 +1,11 @@
 
 import os
+from os.path import join
 import h5py
 import glob
 
 import numpy as np
-import torch.utils.data
-
-### Function to sample dataset
-### -------------------------------
-def sample_by_parts():
-    pass
-
-def sample_by_mergers(log_mass, train_frac):
-    ''' Sample by mergers '''
-
-    log_mass_mergers = np.unique(log_mass)
-
-    train_ind, val_ind = [], []
-    for m in log_mass_mergers:
-        # get all indices of stars from the merger
-        ind = np.where(log_mass == m)[0]
-        ind = np.random.permutation(ind)
-
-        # divide into training and validation set
-        n_train = int(np.ceil(len(ind) * train_frac))
-        train_ind.append(ind[:n_train])
-        val_ind.append(ind[n_train:])
-    train_ind = np.concatenate(train_ind)
-    val_ind = np.concatenate(val_ind)
-
-    # shuffle again
-    train_ind = np.random.permutation(train_ind)
-    val_ind = np.random.permutation(val_ind)
-
-    return train_ind, val_ind
-
-def sample_by_stars(n_samples, train_frac=0.9):
-    ''' Sample dataset by stars. Return index '''
-    ind = np.random.permutation(n_samples)
-    n_train = int(np.ceil(n_samples * train_frac))
-    train_ind = ind[:n_train]
-    val_ind = ind[n_train: ]
-    return train_ind, val_ind
-
+import torch
 
 ### Dataset class to take care of data loader
 ### ----------------------------------------
@@ -56,118 +19,122 @@ class Dataset(torch.utils.data.Dataset):
         Iterate over the input directory and read in only one HDF5 file at once to save memory.
         Can be passed directly into torch.utils.data.DataLoader.
     '''
-    def __init__(self, input_dir, input_key, label_key=None, weight_key=None,
-                 transform=None, shuffle=False, n_max_file=None):
+    def __init__(self, in_dir, key, target_key=None, weight_key=None,
+                 transform=None, target_transform=None, weight_transform=None,
+                 shuffle=False, n_files=1000):
+
         super().__init__()
 
-        if isinstance(input_key, str):
-            input_key = [input_key, ]
-
-        # set attributes
-        self.input_dir = input_dir
-        self.input_key = input_key
-        self.label_key = label_key
+        self.in_dir = in_dir
+        self.key = key
+        self.target_key = target_key
         self.weight_key = weight_key
-        self.shuffle = shuffle
         self.transform = transform
+        self.target_transform = target_transform
+        self.weight_transform = weight_transform
+        self.shuffle = shuffle
 
-        self.input_dims = len(input_key)
-
-        # get a list of file in directory
-        self.input_files = sorted(
-            glob.glob(os.path.join(input_dir, 'n*.hdf5')), key=sort_key)[:n_max_file]
-        self.__check_keys(input_key)
-        self.__check_keys(label_key)
+        # get a list of files in input directory
+        self.in_files = []
+        for i in range(n_files):
+            in_file = join(in_dir, f'n{i:02d}.hdf5')
+            if not os.path.exists(in_file):
+                break
+            self.in_files.append(in_file)
+        self.__check_keys(key)
+        self.__check_keys([target_key, ])
 
         self.sizes = self.__get_sizes()
         self.sizes_c = np.cumsum(self.sizes)
 
         # set data cache
-        self.cache = [None, None]
-        self.current_file_index = None
+        self.data = [None, None, None]
+        self.current_file_idx = None
 
-    def __check_keys(self, key):
+    def __check_keys(self, keys):
         ''' Iterate through self.input_files and check if keys exist '''
-        if key is None:
-            return
-
-        for file in self.input_files:
-            with h5py.File(file, 'r') as f:
-                if isinstance(key, str):
-                    if f.get(key) is None:
-                        raise KeyError('Key {} does not exist in file {}'.format(key, file))
-                else:
-                    for k in key:
+        for in_file in self.in_files:
+            with h5py.File(in_file, 'r') as f:
+                for k in keys:
+                    if k is not None:
                         if f.get(k) is None:
-                            raise KeyError('Key {} does not exist in file {}'.format(k, file))
+                            raise KeyError('Key {} does not exist in file {}'.format(k, in_file))
 
     def __get_sizes(self):
         ''' Iterate through self.input_files and count the
         number of samples in each file '''
-
         sizes = []
-        for file in self.input_files:
+        for file in self.in_files:
             with h5py.File(file, 'r') as f:
-                sizes.append(f[self.input_key[0]].len())
+                sizes.append(f[self.key[0]].len())
         return sizes
 
     def __len__(self):
         ''' Return number of samples '''
         return np.sum(self.sizes)
 
-    def __cache(self, file_index):
+    def __cache(self, file_idx):
         ''' Cache data '''
-        # reset cache data
-        self.cache = [None, None, None]
-
-        with h5py.File(self.input_files[file_index], 'r') as f:
-            # read in input data
-            input_data = []
-            for key in self.input_key:
-                input_data.append(f[key][:])
-            input_data = np.stack(input_data, -1)
-
+        with h5py.File(self.in_files[file_idx], 'r') as f:
+            data = []
+            for k in self.key:
+                data.append(f[k][:])
+            data = np.stack(data, -1)
             if self.shuffle:
-                rand = np.random.permutation(input_data.shape[0])
-                input_data = input_data[rand]
-            self.cache[0] = input_data
+                rand = np.random.permutation(data.shape[0])
+                data = data[rand]
 
-            # read in label data
-            if self.label_key is not None:
-                label = f[self.label_key][:].reshape(-1, 1)
-                if self.shuffle:
-                    label = label[rand]
-                self.cache[1] = label
-
-            # read in weight data
+            if self.target_key is not None:
+                target = f[self.target_key][:]
+                target = target[rand] if self.shuffle else target
+            else:
+                target = None
             if self.weight_key is not None:
-                weight =f[self.weight_key][:].reshape(-1, 1)
-                if self.shuffle:
-                    weight = weight[rand]
-                self.cache[2] = weight
+                weight = f[self.weight_key][:]
+                weight = weight[rand] if self.shuffle else weight
+            else:
+                weight = None
+        # reset cache data
+        self.data = [data, target, weight]
 
-    def __getitem__(self, index):
+    def __getitem__(self, idx):
         ''' Get item of a given index. Index continuous between files
         in the same order of self.input_files '''
+        if idx >= self.__len__():
+                raise IndexError('list index out of range')
 
-        file_index = np.digitize(index, self.sizes_c)
-        if file_index != self.current_file_index:
-            self.__cache(file_index)
-            self.current_file_index = file_index
-        if file_index != 0:
-            index -= self.sizes_c[file_index-1]
+        file_idx = np.digitize(idx, self.sizes_c)
+        if file_idx != self.current_file_idx:
+            self.__cache(file_idx)
+            self.current_file_idx = file_idx
+        if file_idx != 0:
+            idx -= self.sizes_c[file_idx-1]
 
         # return data
+        data, target, weight = self.data
         return_data = []
-
         if self.transform is not None:
-            return_data.append(self.transform(self.cache[0][index]))
+            data = self.transform(data[idx])
+            data = torch.FloatTensor(data)
         else:
-            return_data.append(self.cache[0][index])
-        if self.label_key is not None:
-            return_data.append(self.cache[1][index])
-        if self.weight_key is not None:
-            return_data.append(self.cache[2][index])
+            data = torch.FloatTensor(data[idx])
+        return_data.append(data)
+
+        if target is not None:
+            if self.target_transform is not None:
+                target = self.target_transform(target[idx])
+                target = torch.FloatTensor(target[idx])
+            else:
+                target = torch.FloatTensor(target[idx])
+            return_data.append(target)
+
+        if weight is not None:
+            if self.weight_transform is not None:
+                weight = self.weight_transform(weight[idx])
+                weight = torch.FloatTensor(weight[idx])
+            else:
+                weight = torch.FloatTensor(weight[idx])
+            return_data.append(weight)
 
         return return_data
 

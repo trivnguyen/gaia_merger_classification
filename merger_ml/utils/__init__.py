@@ -1,2 +1,5 @@
 
-from . import io, dataset, tuning, knn
+from . import dataset
+from . import io
+from . import sampling
+from . import knn

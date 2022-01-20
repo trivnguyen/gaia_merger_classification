@@ -24,7 +24,7 @@ class FCClassifier(pl.LightningModule):
     ''' Fully-connected Classifier '''
 
     def __init__(self, in_dim=1, out_dim=1, num_layers=2, hidden_dim=128,
-                 dropout=0., init_weights=True, lr_scheduler=False, extra_hparams={}):
+                 dropout=0., init_weights=False, lr_scheduler=False, extra_hparams={}):
         super().__init__()
         self.save_hyperparameters()
 
@@ -100,3 +100,15 @@ class FCClassifier(pl.LightningModule):
         loss = self.criterion(yhat, y)
         self.log('test_loss', loss, on_epoch=True, batch_size=len(x))
 
+    def predict_step(self, predict_batch, batch_idx):
+        if len(predict_batch) > 1:
+            x, y = predict_batch
+        else:
+            x = predict_batch[0]
+            y = None
+        yhat = self(x)
+        if y is not None:
+            loss = self.criterion(yhat, y)
+            return yhat, y, loss
+        else:
+            return yhat

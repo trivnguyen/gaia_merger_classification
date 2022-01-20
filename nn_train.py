@@ -14,7 +14,7 @@ from torch.utils.data import DataLoader
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
-
+from pytorch_lightning.loggers import CSVLogger
 
 from merger_ml import utils
 from merger_ml.modules import fc_nn
@@ -64,6 +64,8 @@ def parse_cmd():
                         help='List of keys of input features.')
     parser.add_argument('--overwrite', action='store_true',
                         help='If enable, overwrite the previous driectory')
+    parser.add_argument('--name', required=False,default='default',
+                        help='Name of run')
 
     # nn args
     parser.add_argument(
@@ -179,14 +181,14 @@ if __name__ == '__main__':
     callbacks = [
         ModelCheckpoint(
             monitor="val_loss", mode='min', filename="{epoch}-{val_loss:.4f}",
-            dirpath=FLAGS.out_dir,
             save_top_k=3, save_weights_only=True),
-        EarlyStopping(monitor="val_loss", min_delta=0.00, patience=3, mode='min', verbose=True)
+        EarlyStopping(monitor="val_loss", min_delta=0.00, patience=5, mode='min', verbose=True)
     ]
+    trainer_logger = CSVLogger(FLAGS.out_dir, name=FLAGS.name)
     trainer = pl.Trainer(
         default_root_dir=FLAGS.out_dir,
         accelerator=FLAGS.accelerator, devices=FLAGS.devices,
-        max_epochs=FLAGS.max_epochs, callbacks=callbacks)
+        max_epochs=FLAGS.max_epochs, callbacks=callbacks, logger=trainer_logger)
 
     # Start training
     trainer.fit(model=model, train_dataloaders=train_loader, val_dataloaders=val_loader)

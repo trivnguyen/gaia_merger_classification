@@ -64,7 +64,7 @@ class FCClassifier(pl.LightningModule):
         return self.fc(x)
 
     def configure_optimizers(self):
-        optimizer = torch.optim.AdamW(
+        optimizer = torch.optim.Adam(
             self.parameters(), lr=self.extra_hparams.get('lr', '1e-3'))
         if not self.lr_scheduler:
             return optimizer
@@ -74,6 +74,8 @@ class FCClassifier(pl.LightningModule):
                 'lr_scheduler': {
                     'scheduler': torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min'),
                     'monitor': 'train_loss',
+                    'interval': 'epoch',
+                    'frequency': 1
                 }
             }
 
@@ -82,7 +84,10 @@ class FCClassifier(pl.LightningModule):
         x = x.view(-1, self.in_dim)
         yhat = self(x)
         loss = self.criterion(yhat, y)
-        self.log('train_loss', loss, on_epoch=True, batch_size=len(x))
+        pred = (yhat > 0).float()
+        acc = (pred == y).float().mean()
+        self.log_dict({'train_loss': loss, 'train_acc': acc},
+                      on_step=False, on_epoch=True, batch_size=len(x))
         return loss
 
     def validation_step(self, val_batch, batch_idx):
@@ -90,7 +95,10 @@ class FCClassifier(pl.LightningModule):
         x = x.view(-1, self.in_dim)
         yhat = self(x)
         loss = self.criterion(yhat, y)
-        self.log('val_loss', loss, on_epoch=True, batch_size=len(x))
+        pred = (yhat > 0).float()
+        acc = (pred == y).float().mean()
+        self.log_dict({'val_loss': loss, 'val_acc': acc},
+                      on_step=False, on_epoch=True, batch_size=len(x))
         return loss
 
     def test_step(self, test_batch, batch_idx):
@@ -98,14 +106,18 @@ class FCClassifier(pl.LightningModule):
         x = x.view(-1, self.in_dim)
         yhat = self(x)
         loss = self.criterion(yhat, y)
-        self.log('test_loss', loss, on_epoch=True, batch_size=len(x))
+        pred = (yhat > 0).float()
+        acc = (pred == y).float().mean()
+        self.log_dict({'test_loss': loss, 'test_acc': acc},
+                      on_step=False, on_epoch=True, batch_size=len(x))
 
-    def predict_step(self, predict_batch, batch_idx):
+    def predict_step(self, predict_batch, batch_idx, dataloader_idx=0):
         if len(predict_batch) > 1:
             x, y = predict_batch
         else:
             x = predict_batch[0]
             y = None
+        x = x.view(-1, self.in_dim)
         yhat = self(x)
         if y is not None:
             loss = self.criterion(yhat, y)

@@ -28,18 +28,18 @@ class FCClassifier(pl.LightningModule):
         super().__init__()
         self.save_hyperparameters()
 
-        self.in_dim = in_dim
-        self.out_dim = out_dim
-        self.num_layers = num_layers
-        self.hidden_dim = hidden_dim
-        self.dropout = dropout
-        self.init_weights = init_weights
-        self.pos_weight = extra_hparams.get('pos_weight')
+        self.in_dim = self.hparams.in_dim
+        self.out_dim = self.hparams.out_dim
+        self.num_layers = self.hparams.num_layers
+        self.hidden_dim = self.hparams.hidden_dim
+        self.dropout = self.hparams.dropout
+        self.init_weights = self.hparams.init_weights
+        self.pos_weight = self.hparams.extra_hparams.get('pos_weight')
         if self.pos_weight is not None:
             self.pos_weight = torch.tensor(self.pos_weight, dtype=torch.float)
         self.criterion = nn.BCEWithLogitsLoss(pos_weight=self.pos_weight)
-        self.lr_scheduler = lr_scheduler
-        self.extra_hparams = extra_hparams
+        self.lr_scheduler = self.hparams.lr_scheduler
+        self.extra_hparams = self.hparams.extra_hparams
 
         # Create hidden layers
         layers = []

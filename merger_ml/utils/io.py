@@ -5,6 +5,30 @@ import h5py
 
 import numpy as np
 
+# Define some global constants
+INPUT_KEY_DICT = {
+    'ACTION': ('Jr', 'Jphi', 'Jz'),
+    'ACTION_FEH': ('Jr', 'Jphi', 'Jz', 'feh'),
+    '6D_CYLC': ('r', 'phi', 'z', 'Jr', 'Jphi', 'Jz'),
+    '6D_CYLC_FEH': ('r' , 'phi', 'z', 'Jr', 'Jphi', 'Jz', 'feh'),
+    '6D_CART': ('x', 'y', 'z', 'Jr', 'Jphi', 'Jz'),
+    '6D_CART_FEH': ('x' , 'y', 'z', 'Jr', 'Jphi', 'Jz', 'feh'),
+    'ACTION_TIME': ('Jr', 'Jphi', 'Jz', 'a', 'T_uni'),
+    'ACTION_FEH_TIME': ('Jr', 'Jphi', 'Jz', 'feh', 'a', 'T_uni'),
+    '6D_CYLC_TIME': ('r', 'phi', 'z', 'Jr', 'Jphi', 'Jz', 'a', 'T_uni'),
+    '6D_CYLC_FEH_TIME': ('r' , 'phi', 'z', 'Jr', 'Jphi', 'Jz', 'feh', 'a', 'T_uni'),
+    '6D_CART_TIME': ('x', 'y', 'z', 'Jr', 'Jphi', 'Jz', 'a', 'T_uni'),
+    '6D_CART_FEH_TIME': ('x' , 'y', 'z', 'Jr', 'Jphi', 'Jz', 'feh', 'a', 'T_uni'),
+}
+
+def get_input_key(key):
+    ''' Convienient function to get input key from dict '''
+    if (len(key) == 1) and (key[0].upper() in INPUT_KEY_DICT.keys()):
+        input_key = INPUT_KEY_DICT[key[0].upper()]
+    else:
+        input_key = key
+    return input_key
+
 def choose_best_model(pretrained_model_dir, metrics='loss', mode='min'):
     ''' Choose best model from a pretrained model directory '''
 
@@ -18,8 +42,7 @@ def choose_best_model(pretrained_model_dir, metrics='loss', mode='min'):
     return os.path.join(pretrained_model_dir, 'models/epoch_{}'.format(best_ep))
 
 
-
-def read_dataset(data_dir, properties=None):
+def read_data_dir(data_dir, properties=None):
     ''' Convenient function to read multiple HDF5 files into dictionary '''
     # query all input files from data directory
     data_files = sorted(glob.glob(os.path.join(data_dir, '*.hdf5')))

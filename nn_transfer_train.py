@@ -66,7 +66,13 @@ def parse_cmd():
     parser.add_argument('--overwrite', action='store_true',
                         help='If enable, overwrite the previous driectory')
     parser.add_argument('--name', required=False,default='default',
-                        help='Name of run')
+                        help='Name of the run')
+
+    # transer learning args
+    parser.add_argument('--train-first', action='store_true',
+                        help='Enable to train the first layer. Not exclusive with --train-last')
+    parser.add_argument('--train-last', action='store_true',
+                        help='Enable to train the last layer. Not exclusive with --train-first')
 
     # training args
     parser.add_argument(
@@ -80,13 +86,13 @@ def parse_cmd():
         help='Learning rate of ADAM. Default is 1e-3')
     parser.add_argument(
         '--lr-scheduler', action='store_true', required=False,
-        help='Enable to use LR scheduler. LR scheduler is set to reduced on plateau.')
+        help='Enable to use LR scheduler. LR scheduler is set to reduced on plateau')
     parser.add_argument(
         '-w', '--use-weights', action='store_true', required=False,
-        help='Enable to use loss weights to account for imbalance training set.')
+        help='Enable to use loss weights to account for imbalance training set')
     parser.add_argument(
         '--pos-weight-factor', required=False, type=float, default=1,
-        help='If loss weights are enable, divide label-1 weight by this factor.')
+        help='If loss weights are enable, divide label-1 weight by this factor')
 
     # gpu/cpu arguments
     parser.add_argument(
@@ -99,6 +105,8 @@ def parse_cmd():
         '--num-workers', required=False, type=int, default=1,
         help='Number of workers in DataLoader')
 
+    # throw some errors for invalid
+    params = parser.parse_args()
     return parser.parse_args()
 
 
@@ -164,11 +172,18 @@ if __name__ == '__main__':
             'pos_weight': pos_weight,
             'key': list(input_key),
             'preprocess': {
-            'mean': input_mean,
-            'stdv': input_stdv,
+                'mean': input_mean,
+                'stdv': input_stdv,
+            },
+            'transfer': {
+                'train_first': FLAGS.train_first,
+                'train_last': FLAGS.train_last,
             }
         }
     )
+    #for parameter in model.parameters():
+    #    if parameter.requires_grad:
+    #        print(parameter)
 
     # Create trainer
     callbacks = [

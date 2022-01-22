@@ -3,6 +3,7 @@
 import os
 import sys
 import json
+import h5py
 import argparse
 import logging
 import shutil
@@ -98,7 +99,7 @@ def parse_cmd():
         '-w', '--use-weights', action='store_true', required=False,
         help='Enable to use loss weights to account for imbalance training set.')
     parser.add_argument(
-        '--pos-weight-factor', required=False, type=float, default=5,
+        '--pos-weight-factor', required=False, type=float, default=1,
         help='If loss weights are enable, divide label-1 weight by this factor.')
 
     # gpu/cpu arguments
@@ -181,15 +182,25 @@ if __name__ == '__main__':
     callbacks = [
         ModelCheckpoint(
             monitor="val_loss", mode='min', filename="{epoch}-{val_loss:.4f}",
-            save_top_k=3, save_weights_only=True),
+            save_top_k=3, save_last=True,save_weights_only=True),
         EarlyStopping(monitor="val_loss", min_delta=0.00, patience=5, mode='min', verbose=True)
     ]
     trainer_logger = CSVLogger(FLAGS.out_dir, name=FLAGS.name)
     trainer = pl.Trainer(
         default_root_dir=FLAGS.out_dir,
         accelerator=FLAGS.accelerator, devices=FLAGS.devices,
-        max_epochs=FLAGS.max_epochs, callbacks=callbacks, logger=trainer_logger)
+        max_epochs=FLAGS.max_epochs, min_epochs=min(10, FLAGS.max_epochs),
+        callbacks=callbacks, logger=trainer_logger)
 
     # Start training
     trainer.fit(model=model, train_dataloaders=train_loader, val_dataloaders=val_loader)
 
+    # Evaluating on validation set and save
+    results = trainer.predict(model, val_loader, ckpt_path=callbacks[0].best_model_path)
+    predict = torch.cat([res[0] for res in results]).numpy()
+    target = torch.cat([res[1] for res in results]).numpy()
+
+    res_fn = os.path.join(trainer_logger.log_dir, 'best_val_results.hdf5')
+    with h5py.File(res_fn, 'w') as f:
+        f.create_dataset('predict', data=predict)
+        f.create_dataset('target', data=target)

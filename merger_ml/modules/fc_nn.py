@@ -53,6 +53,19 @@ class FCClassifier(pl.LightningModule):
         if init_weights:
             self.apply(self._init_weights)
 
+        # Freezing layers
+        if extra_hparams.get('transfer') is not None:
+            transfer = extra_hparams['transfer']
+            if transfer['train_first'] or transfer['train_last']:
+                for parameter in self.fc.parameters():
+                    parameter.requires_grad = False
+                if transfer['train_first']:
+                    for parameter in self.fc[0].parameters():
+                        parameter.requires_grad = True
+                if transfer['train_last']:
+                    for parameter in self.fc[-1].parameters():
+                        parameter.requires_grad = True
+
     def _init_weights(self, m):
         ''' Initialize weight '''
         if isinstance(m, nn.Linear):

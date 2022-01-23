@@ -65,18 +65,6 @@ if __name__ == '__main__':
     FLAGS = parse_cmd()
     logger = set_logger()
 
-    # weights to account for imbalanced dataset
-    if FLAGS.use_weights:
-        with open(os.path.join(FLAGS.input_dir, 'properties.json'), 'r') as f:
-            properties = json.load(f)
-        w_0 = 1. / properties['train']['f_0'] # w_0 = N_total / N_1
-        # w_1 = N_total / (N_1 * pos_weight_factor)
-        w_1 = 1. / properties['train']['f_1']  / FLAGS.pos_weight_factor
-        pos_weight = w_1 / w_0
-        logging.info('Use imbalance weight: {:.4f}'.format(pos_weight))
-    else:
-        pos_weight = None
-
     # Load checkpoint
     model = fc_nn.FCClassifier.load_from_checkpoint(FLAGS.checkpoint)
     model.eval()

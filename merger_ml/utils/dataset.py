@@ -25,10 +25,14 @@ class Dataset(torch.utils.data.Dataset):
 
         super().__init__()
 
+        if isinstance(key, str):
+            key = [key, ]
+
         self.in_dir = in_dir
         self.key = key
         self.target_key = target_key
         self.weight_key = weight_key
+        self.all_keys= list(key) + [target_key, weight_key]
         self.transform = transform
         self.target_transform = target_transform
         self.weight_transform = weight_transform
@@ -41,15 +45,24 @@ class Dataset(torch.utils.data.Dataset):
             if not os.path.exists(in_file):
                 break
             self.in_files.append(in_file)
-        self.__check_keys(key)
-        self.__check_keys([target_key, ])
+        self.__check_keys(self.all_keys)
 
+        # get number of classes
+        self.num_classes = self.__get_num_classes()
+
+        # get all sizes
         self.sizes = self.__get_sizes()
         self.sizes_c = np.cumsum(self.sizes)
 
         # set data cache
         self.data = [None, None, None]
         self.current_file_idx = None
+
+    def __get_num_classes(self):
+        ''' Get number of classes '''
+        with h5py.File(self.in_files[0], 'r') as f:
+            num_classes = f.attrs['n_classes']
+        return num_classes
 
     def __check_keys(self, keys):
         ''' Iterate through self.input_files and check if keys exist '''
@@ -101,7 +114,7 @@ class Dataset(torch.utils.data.Dataset):
         ''' Get item of a given index. Index continuous between files
         in the same order of self.input_files '''
         if idx >= self.__len__():
-                raise IndexError('list index out of range')
+            raise IndexError('list index out of range')
 
         file_idx = np.digitize(idx, self.sizes_c)
         if file_idx != self.current_file_idx:
@@ -115,25 +128,22 @@ class Dataset(torch.utils.data.Dataset):
         return_data = []
         if self.transform is not None:
             data = self.transform(data[idx])
-            data = torch.FloatTensor(data)
         else:
-            data = torch.FloatTensor(data[idx])
+            data = data[idx]
         return_data.append(data)
 
         if target is not None:
             if self.target_transform is not None:
                 target = self.target_transform(target[idx])
-                target = torch.FloatTensor(target[idx])
             else:
-                target = torch.FloatTensor(target[idx])
+                target = target[idx]
             return_data.append(target)
 
         if weight is not None:
             if self.weight_transform is not None:
                 weight = self.weight_transform(weight[idx])
-                weight = torch.FloatTensor(weight[idx])
             else:
-                weight = torch.FloatTensor(weight[idx])
+                weight = weight[idx]
             return_data.append(weight)
 
         return return_data

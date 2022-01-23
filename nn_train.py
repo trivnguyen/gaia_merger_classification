@@ -31,8 +31,8 @@ def preprocess(input_key, FLAGS):
         preprocess_dict = json.load(f)
 
     # Get mean and standard deviation of each keys and write to output dir
-    mean = [preprocess_dict[k]['mean'] for k in input_key]
-    stdv = [preprocess_dict[k]['stdv'] for k in input_key]
+    mean = np.array([preprocess_dict[k]['mean'] for k in input_key], dtype=np.float32)
+    stdv = np.array([preprocess_dict[k]['stdv'] for k in input_key], dtype=np.float32)
 
     # define transformation function
     # in this case transform is a standard scaler
@@ -146,25 +146,29 @@ if __name__ == '__main__':
         val_dataset, batch_size=FLAGS.batch_size,
         pin_memory=pin_memory, num_workers=FLAGS.num_workers)
 
+    # get output dimension
+    num_classes = train_dataset.num_classes
+    out_dim = 1 if num_classes == 2 else num_classes
+
     # weights to account for imbalanced dataset
+    pos_weight = None
+    weight = None
     if FLAGS.use_weights:
         with open(os.path.join(FLAGS.input_dir, 'properties.json'), 'r') as f:
             properties = json.load(f)
-        w_0 = 1. / properties['train']['f_0'] # w_0 = N_total / N_1
-        # w_1 = N_total / (N_1 * pos_weight_factor)
-        w_1 = 1. / properties['train']['f_1']  / FLAGS.pos_weight_factor
-        pos_weight = w_1 / w_0
-        logging.info('Use imbalance weight: {:.4f}'.format(pos_weight))
-    else:
-        pos_weight = None
+        weight = [1. / properties['train'][f'f_{i}'] for i in range(num_classes)]
+        if out_dim == 1:
+            pos_weight = weight[1] / weight[0] / FLAGS.pos_weight_factor
+            logging.info('Use imbalance weight: {:.4f}'.format(pos_weight))
 
     # Create model
     model = fc_nn.FCClassifier(
-        in_dim=len(input_key), out_dim=1, num_layers=FLAGS.num_layers,
+        in_dim=len(input_key), out_dim=out_dim, num_layers=FLAGS.num_layers,
         hidden_dim=FLAGS.hidden_dim, lr_scheduler=FLAGS.lr_scheduler,
         init_weights=FLAGS.init_weights, dropout=FLAGS.dropout,
         extra_hparams={
             'lr': FLAGS.lr,
+            'weight': weight,
             'pos_weight': pos_weight,
             'key': list(input_key),
             'preprocess': {

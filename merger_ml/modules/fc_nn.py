@@ -34,12 +34,20 @@ class FCClassifier(pl.LightningModule):
         self.hidden_dim = self.hparams.hidden_dim
         self.dropout = self.hparams.dropout
         self.init_weights = self.hparams.init_weights
-        self.pos_weight = self.hparams.extra_hparams.get('pos_weight')
-        if self.pos_weight is not None:
-            self.pos_weight = torch.tensor(self.pos_weight, dtype=torch.float)
-        self.criterion = nn.BCEWithLogitsLoss(pos_weight=self.pos_weight)
         self.lr_scheduler = self.hparams.lr_scheduler
         self.extra_hparams = self.hparams.extra_hparams
+
+        # loss function
+        if self.out_dim == 1:
+            self.pos_weight = self.hparams.extra_hparams.get('pos_weight')
+            if self.pos_weight is not None:
+                self.pos_weight = torch.tensor(self.pos_weight, dtype=torch.float)
+            self.criterion = nn.BCEWithLogitsLoss(pos_weight=self.pos_weight)
+        else:
+            self.weight = self.hparams.extra_hparams.get('weight')
+            if self.weight is not None:
+                self.weight = torch.tensor(self.weight, dtype=torch.float)
+            self.criterion = nn.CrossEntropyLoss(self.weight)
 
         # Create hidden layers
         layers = []
@@ -97,9 +105,7 @@ class FCClassifier(pl.LightningModule):
         x = x.view(-1, self.in_dim)
         yhat = self(x)
         loss = self.criterion(yhat, y)
-        pred = (yhat > 0).float()
-        acc = (pred == y).float().mean()
-        self.log_dict({'train_loss': loss, 'train_acc': acc},
+        self.log_dict({'train_loss': loss, },
                       on_step=False, on_epoch=True, batch_size=len(x))
         return loss
 
@@ -108,9 +114,7 @@ class FCClassifier(pl.LightningModule):
         x = x.view(-1, self.in_dim)
         yhat = self(x)
         loss = self.criterion(yhat, y)
-        pred = (yhat > 0).float()
-        acc = (pred == y).float().mean()
-        self.log_dict({'val_loss': loss, 'val_acc': acc},
+        self.log_dict({'val_loss': loss, },
                       on_step=False, on_epoch=True, batch_size=len(x))
         return loss
 
@@ -119,9 +123,7 @@ class FCClassifier(pl.LightningModule):
         x = x.view(-1, self.in_dim)
         yhat = self(x)
         loss = self.criterion(yhat, y)
-        pred = (yhat > 0).float()
-        acc = (pred == y).float().mean()
-        self.log_dict({'test_loss': loss, 'test_acc': acc},
+        self.log_dict({'test_loss': loss, },
                       on_step=False, on_epoch=True, batch_size=len(x))
 
     def predict_step(self, predict_batch, batch_idx, dataloader_idx=0):

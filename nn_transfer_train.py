@@ -20,25 +20,42 @@ from pytorch_lightning.loggers import CSVLogger
 from merger_ml import utils
 from merger_ml.modules import fc_nn
 
-
 def preprocess(input_key, FLAGS):
     ''' Read in preprocess file and return preprocessing function based on input key '''
 
-    preprocess_file = os.path.join(FLAGS.input_dir, 'preprocess.json')
-    if not os.path.exists(preprocess_file):
-        raise FileNotFoundError('preprocess file not found in input_dir')
-    with open(preprocess_file, 'r') as f:
-        preprocess_dict = json.load(f)
+    # Open an input file and read in the meta data
+    fn = os.path.join(FLAGS.input_dir, 'train/n00.hdf5')
+    meta = {}
+    with h5py.File(fn, 'r') as f:
+        meta_group = f['meta']
+        for prop in meta_group:
+            meta[prop] = dict(meta_group[prop].attrs)
 
     # Get mean and standard deviation of each keys and write to output dir
-    mean = [preprocess_dict[k]['mean'] for k in input_key]
-    stdv = [preprocess_dict[k]['stdv'] for k in input_key]
+    mean = np.array([meta[k]['mean'] for k in input_key], dtype=np.float32)
+    stdv = np.array([meta[k]['stdv'] for k in input_key], dtype=np.float32)
 
     # define transformation function
     # in this case transform is a standard scaler
     def transform(x):
         return (x - mean) / stdv
     return transform, mean, stdv
+
+def get_weight(FLAGS):
+    ''' Get imbalance weight '''
+    weight, pos_weight = None, None
+    if not FLAGS.use_weight:
+        return weight, pos_weight
+
+    fn = os.path.join(FLAGS.input_dir, 'train/n00.hdf5')
+    with h5py.File(fn, 'r') as f:
+        meta_group = f['meta']
+        num_classes = f.attrs['n_classes']
+        weight = [1./ meta_group['train'].attrs[f'f_{i}'] for i in range(num_classes)]
+        if num_classes == 2:
+            pos_weight = weight[1] / weight[0] / FLAGS.pos_weight_factor
+            logging.info('Use imbalance weight: {:.4f}'.format(pos_weight))
+    return weight, pos_weight
 
 def set_logger():
     ''' Set up stdv out logger and file handler '''
@@ -88,7 +105,7 @@ def parse_cmd():
         '--lr-scheduler', action='store_true', required=False,
         help='Enable to use LR scheduler. LR scheduler is set to reduced on plateau')
     parser.add_argument(
-        '-w', '--use-weights', action='store_true', required=False,
+        '-w', '--use-weight', action='store_true', required=False,
         help='Enable to use loss weights to account for imbalance training set')
     parser.add_argument(
         '--pos-weight-factor', required=False, type=float, default=1,
@@ -153,16 +170,7 @@ if __name__ == '__main__':
         pin_memory=pin_memory, num_workers=FLAGS.num_workers)
 
     # weights to account for imbalanced dataset
-    if FLAGS.use_weights:
-        with open(os.path.join(FLAGS.input_dir, 'properties.json'), 'r') as f:
-            properties = json.load(f)
-        w_0 = 1. / properties['train']['f_0'] # w_0 = N_total / N_1
-        # w_1 = N_total / (N_1 * pos_weight_factor)
-        w_1 = 1. / properties['train']['f_1']  / FLAGS.pos_weight_factor
-        pos_weight = w_1 / w_0
-        logging.info('Use imbalance weight: {:.4f}'.format(pos_weight))
-    else:
-        pos_weight = None
+    weight, pos_weight = get_weight(FLAGS)
 
     # Update model with new hypeperameters
     model = fc_nn.FCClassifier.load_from_checkpoint(

@@ -15,6 +15,26 @@ import pytorch_lightning as pl
 from merger_ml import utils
 from merger_ml.modules import fc_nn
 
+def preprocess(input_key, FLAGS):
+    ''' Read in preprocess file and return preprocessing function based on input key '''
+
+    # Open an input file and read in the meta data
+    fn = os.path.join(FLAGS.input_dir, 'n00.hdf5')
+    meta = {}
+    with h5py.File(fn, 'r') as f:
+        meta_group = f['meta']
+        for prop in meta_group:
+            meta[prop] = dict(meta_group[prop].attrs)
+
+    # Get mean and standard deviation of each keys and write to output dir
+    mean = np.array([meta[k]['mean'] for k in input_key], dtype=np.float32)
+    stdv = np.array([meta[k]['stdv'] for k in input_key], dtype=np.float32)
+
+    # define transformation function
+    # in this case transform is a standard scaler
+    def transform(x):
+        return (x - mean) / stdv
+    return transform, mean, stdv
 
 def set_logger():
     ''' Set up stdv out logger and file handler '''
@@ -40,10 +60,13 @@ def parse_cmd():
     parser.add_argument('-c', '--checkpoint', required=True,
                         help='path to checkpoint with pretrained model')
 
-    # dataset args
+    # dataset and preprocessing args
     parser.add_argument(
         '-b', '--batch-size', required=False, type=int, default=1000,
         help='Batch size. Default to 1000')
+    parser.add_argument(
+        '--use-data-preprocess', action='store_true',
+        help='Enable to use preprocess features from evaluation data instead of training data')
 
     # gpu/cpu arguments
     parser.add_argument(
@@ -71,10 +94,15 @@ if __name__ == '__main__':
     extra_hparams = model.extra_hparams
 
     # Read in dataset
-    def transform(x):
-        mean = extra_hparams['preprocess']['mean']
-        stdv = extra_hparams['preprocess']['stdv']
-        return (x - mean) / stdv
+    if FLAGS.use_data_preprocess:
+        logger.info('Using preprocessing features from evaluation data')
+        transform, mean, stdv = preprocess(extra_hparams['key'], FLAGS)
+    else:
+        logger.info('Using preprocessing features from training data')
+        def transform(x):
+            mean = np.float32(extra_hparams['preprocess']['mean'])
+            stdv = np.float32(extra_hparams['preprocess']['stdv'])
+            return (x - mean) / stdv
     dataset = utils.dataset.Dataset(
         FLAGS.input_dir, key=extra_hparams['key'], target_key='labels',
         transform=transform)
@@ -108,7 +136,8 @@ if __name__ == '__main__':
     with h5py.File(FLAGS.output, 'w') as f:
         f.attrs.update({
             'checkpoint': os.path.abspath(FLAGS.checkpoint),
-            'input_dir': os.path.abspath(FLAGS.input_dir)
+            'input_dir': os.path.abspath(FLAGS.input_dir),
+            'use_data_preprocess': int(FLAGS.use_data_preprocess),
         })
         f.create_dataset('predict', data=predict)
         f.create_dataset('target', data=target)
